@@ -38,3 +38,35 @@ def get_charge(charge_id):
         return jsonify({"error": "Charge not found"}), 404
 
     return jsonify(charge)
+
+
+@app.route("/external/payments", methods=["POST"])
+def external_payment():
+    data = request.get_json()
+
+    charge = next(
+        (c for c in charges if c["external_id"] == data.get("external_id")),
+        None
+    )
+
+    if not charge:
+        return jsonify({"error": "Invalid external_id"}), 400
+
+    if data["value"] != charge["value"]:
+        return jsonify({"error": "Invalid value"}), 400
+
+    if datetime.now() > charge["expires_at"]:
+        charge["status"] = "EXPIRED"
+        return jsonify({"error": "Charge expired"}), 400
+
+    # Simula webhook
+    confirm_payment(charge)
+
+    return jsonify({"message": "Payment processed"})
+
+def confirm_payment(charge):
+    if charge["status"] != "PENDING":
+        return
+
+    charge["status"] = "PAID"
+    charge["paid_at"] = datetime.now()
