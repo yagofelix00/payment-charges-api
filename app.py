@@ -12,6 +12,13 @@ app.config['SECRET_KEY'] = 'SECRET_KEY_WEBSOCKET'
 
 db.init_app(app)
 
+def check_and_expire(charge):
+    if charge.status == ChargeStatus.PENDING:
+        if datetime.utcnow() > charge.expires_at:
+            charge.status = ChargeStatus.EXPIRED
+            db.session.commit()
+
+
 @app.route("/charges", methods=["POST"])
 def create_charge():
     data = request.get_json()
@@ -46,6 +53,7 @@ def get_charge(charge_id):
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
+    check_and_expire(charge)
 
     return jsonify({
         "id": charge.id,
@@ -66,6 +74,7 @@ def external_payment():
     if not charge:
         return jsonify({"error": "Invalid external_id"}), 400
 
+    check_and_expire(charge)
 
     if charge.status != "PENDING":
         return jsonify({"error": "Charge not payable"}), 400
