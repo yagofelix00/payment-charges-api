@@ -46,6 +46,7 @@ def get_charge(charge_id):
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
+
     return jsonify({
         "id": charge.id,
         "value": charge.value,
@@ -58,25 +59,25 @@ def get_charge(charge_id):
 def external_payment():
     data = request.get_json()
 
-    charge = next(
-        (c for c in charges if c["external_id"] == data.get("external_id")),
-        None
-    )
+    charge = Charge.query.filter_by(
+        external_id=data.get("external_id")
+    ).first()
 
     if not charge:
         return jsonify({"error": "Invalid external_id"}), 400
 
-    if data["value"] != charge["value"]:
+
+    if charge.status != "PENDING":
+        return jsonify({"error": "Charge not payable"}), 400
+
+    if data.get("value") != charge.value:
         return jsonify({"error": "Invalid value"}), 400
 
-    if datetime.now() > charge["expires_at"]:
-        charge["status"] = "EXPIRED"
-        return jsonify({"error": "Charge expired"}), 400
+    charge.status = "PAID"
+    charge.paid_at = datetime.utcnow()
+    db.session.commit()
 
-    # Simula webhook
-    confirm_payment(charge)
-
-    return jsonify({"message": "Payment processed"})
+    return jsonify({"message": "Payment confirmed"})
 
 def confirm_payment(charge):
     if charge["status"] != "PENDING":
@@ -85,3 +86,7 @@ def confirm_payment(charge):
     charge["status"] = "PAID"
     charge["paid_at"] = datetime.now()
 
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
