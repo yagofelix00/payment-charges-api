@@ -1,10 +1,16 @@
 from flask import Flask, request, jsonify
+from repository.database import db
+from db_models.charges import Charge, ChargeStatus  
 from datetime import datetime, timedelta
 import uuid
 
 app = Flask(__name__)
 
-charges = []  # memória por enquanto
+# Configuração do banco de dados e chave secreta para sessões e WebSockets
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SECRET_KEY'] = 'SECRET_KEY_WEBSOCKET'
+
+db.init_app(app)
 
 @app.route("/charges", methods=["POST"])
 def create_charge():
@@ -16,28 +22,36 @@ def create_charge():
     if data["value"] <= 0:
         return jsonify({"error": "Invalid value"}), 400
 
-    charge = {
-        "id": len(charges) + 1,
-        "value": data["value"],
-        "status": "PENDING",
-        "external_id": str(uuid.uuid4()),
-        "created_at": datetime.now(),
-        "expires_at": datetime.now() + timedelta(minutes=30)
-    }
+    charge = Charge(
+        value=data["value"],
+        status=ChargeStatus.PENDING,
+        external_id=str(uuid.uuid4()),
+        created_at=datetime.utcnow(),
+        expires_at=datetime.utcnow() + timedelta(minutes=30)
+    )
 
-    charges.append(charge)
 
-    return jsonify(charge), 201
-   
+    db.session.add(charge)
+    db.session.commit()
+
+    return jsonify({"id": charge.id,
+                    "external_id": charge.external_id,
+                    "status": charge.status}), 201
+
 
 @app.route("/charges/<int:charge_id>", methods=["GET"])
 def get_charge(charge_id):
-    charge = next((c for c in charges if c["id"] == charge_id), None)
+    charge = Charge.query.get(charge_id)
 
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
-    return jsonify(charge)
+    return jsonify({
+        "id": charge.id,
+        "value": charge.value,
+        "status": charge.status,
+        "expires_at": charge.expires_at.isoformat()
+    })
 
 
 @app.route("/external/payments", methods=["POST"])
@@ -70,3 +84,4 @@ def confirm_payment(charge):
 
     charge["status"] = "PAID"
     charge["paid_at"] = datetime.now()
+
