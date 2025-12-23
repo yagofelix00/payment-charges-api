@@ -1,15 +1,16 @@
 from flask import request, jsonify, current_app
+from functools import wraps
 
-def require_api_key():
-    auth_header = request.headers.get("Authorization")
+def require_api_key(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        api_key = request.headers.get("x-api-key")
 
-    if not auth_header:
-        return jsonify({"error": "Missing Authorization header"}), 401
+        if not api_key:
+            return jsonify({"error": "API key missing"}), 401
 
-    if not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Invalid authorization format"}), 401
+        if api_key != current_app.config["EXTERNAL_API_KEY"]:
+            return jsonify({"error": "Invalid API key"}), 403
 
-    token = auth_header.replace("Bearer ", "")
-
-    if token != current_app.config['EXTERNAL_API_KEY']:
-        return jsonify({"error": "Invalid API key"}), 403
+        return f(*args, **kwargs)
+    return decorated

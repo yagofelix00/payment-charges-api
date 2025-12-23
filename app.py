@@ -67,11 +67,8 @@ def get_charge(charge_id):
 
 
 @app.route("/external/payments", methods=["POST"])
+@require_api_key
 def external_payment():
-    auth_error = require_api_key()
-    if auth_error:
-        return auth_error
-    
     data = request.get_json()
     
     if not data or "external_id" not in data or "value" not in data:
