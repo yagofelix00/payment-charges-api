@@ -1,5 +1,9 @@
 from flask import request, jsonify, current_app
 from functools import wraps
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 def require_api_key(f):
     @wraps(f)

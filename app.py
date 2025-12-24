@@ -4,7 +4,10 @@ from db_models.charges import Charge, ChargeStatus
 from datetime import datetime, timedelta
 from security.auth import require_api_key
 import uuid
+from dotenv import load_dotenv
 import os
+
+load_dotenv()
 
 app = Flask(__name__)
 
