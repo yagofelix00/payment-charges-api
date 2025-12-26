@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from repository.database import db
 from db_models.charges import Charge, ChargeStatus  
+from services.charge_service import confirm_payment
 from datetime import datetime, timedelta
 from security.auth import require_api_key
 import uuid
@@ -84,17 +85,10 @@ def external_payment():
     if not charge:
         return jsonify({"error": "Invalid external_id"}), 400
 
-    check_and_expire(charge)
-
-    if charge.status != ChargeStatus.PENDING.value:
-        return jsonify({"error": "Charge not payable"}), 400
-
-    if data.get("value") != charge.value:
-        return jsonify({"error": "Invalid value"}), 400
-
-    charge.status = ChargeStatus.PAID.value
-    charge.paid_at = datetime.utcnow()
-    db.session.commit()
+    try:
+        confirm_payment(charge, data.get("value"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     return jsonify({"message": "Payment confirmed"})
 
