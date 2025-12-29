@@ -43,7 +43,7 @@ def create_charge():
 
     charge = Charge(
         value=data["value"],
-        status=ChargeStatus.PENDING.value,
+        status=ChargeStatus.PENDING,
         external_id=str(uuid.uuid4()),
         created_at=datetime.utcnow(),
         expires_at=datetime.utcnow() + timedelta(minutes=30)
@@ -55,7 +55,7 @@ def create_charge():
 
     return jsonify({"id": charge.id,
                     "external_id": charge.external_id,
-                     "status": charge.status}), 201
+                     "status": charge.status.value}), 201
 
 
 @app.route("/charges/<int:charge_id>", methods=["GET"])
@@ -70,7 +70,7 @@ def get_charge(charge_id):
     return jsonify({
         "id": charge.id,
         "value": charge.value,
-        "status": charge.status,
+        "status": charge.status.value,
         "expires_at": charge.expires_at.isoformat()
     })
 
@@ -90,10 +90,7 @@ def external_payment():
     if not charge:
         return jsonify({"error": "Invalid external_id"}), 400
 
-    try:
-        confirm_payment(charge, data.get("value"))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    confirm_payment(charge, data.get("value"))
 
     return jsonify({"message": "Payment confirmed"})
 
