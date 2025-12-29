@@ -7,6 +7,10 @@ from security.auth import require_api_key
 import uuid
 from dotenv import load_dotenv
 import os
+from exceptions.charge_exceptions import (
+    ChargeNotPayable,
+    InvalidChargeValue
+)
 
 load_dotenv()
 
@@ -17,6 +21,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['EXTERNAL_API_KEY'] = os.getenv("EXTERNAL_API_KEY")
 
 db.init_app(app)
+
+@app.errorhandler(ChargeNotPayable)
+def handle_not_payable(e):
+    return jsonify({"error": str(e)}), 400
+
+
+@app.errorhandler(InvalidChargeValue)
+def handle_invalid_value(e):
+    return jsonify({"error": str(e)}), 400
 
 # REGRA DE NEGÓCIO: Verifica e expira cobranças pendentes
 def check_and_expire(charge):

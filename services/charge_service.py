@@ -1,6 +1,10 @@
 from datetime import datetime
 from repository.database import db
 from db_models.charges import ChargeStatus
+from exceptions.charge_exceptions import (
+    ChargeNotPayable,
+    InvalidChargeValue
+)
 
 
 def check_and_expire(charge):
@@ -14,10 +18,10 @@ def confirm_payment(charge, value):
     check_and_expire(charge)
 
     if charge.status != ChargeStatus.PENDING:
-        raise ValueError("Charge not payable")
+        raise ChargeNotPayable("Charge not payable")
 
     if charge.value != value:
-        raise ValueError("Invalid value")
+        raise InvalidChargeValue("Invalid value")
 
     charge.status = ChargeStatus.PAID
     charge.paid_at = datetime.utcnow()
