@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from repository.database import db
 from db_models.charges import Charge, ChargeStatus  
-from services.charge_service import confirm_payment
+from services.charge_service import check_and_expire, confirm_payment
 from datetime import datetime, timedelta
 from security.auth import require_api_key
 import uuid
@@ -26,17 +26,9 @@ db.init_app(app)
 def handle_not_payable(e):
     return jsonify({"error": str(e)}), 400
 
-
 @app.errorhandler(InvalidChargeValue)
 def handle_invalid_value(e):
     return jsonify({"error": str(e)}), 400
-
-# REGRA DE NEGÓCIO: Verifica e expira cobranças pendentes
-def check_and_expire(charge):
-    if charge.status == ChargeStatus.PENDING.value:
-        if datetime.utcnow() > charge.expires_at:
-            charge.status = ChargeStatus.EXPIRED.value
-            db.session.commit()
 
 
 @app.route("/charges", methods=["POST"])
