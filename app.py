@@ -11,6 +11,8 @@ from exceptions.charge_exceptions import (
     ChargeNotPayable,
     InvalidChargeValue
 )
+from audit.logger import logger
+
 
 load_dotenv()
 
@@ -52,6 +54,10 @@ def create_charge():
 
     db.session.add(charge)
     db.session.commit()
+    
+    logger.info(
+    f"Charge created | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
+    )
 
     return jsonify({"id": charge.id,
                     "external_id": charge.external_id,
