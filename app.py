@@ -14,7 +14,7 @@ from exceptions.charge_exceptions import (
 from audit.logger import logger
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-
+from security.auth import require_api_key
 
 
 load_dotenv()
@@ -75,7 +75,7 @@ def create_charge():
 
     return jsonify({"id": charge.id,
                     "external_id": charge.external_id,
-                     "status": charge.status.value}), 201
+                     "status": charge.status}), 201
 
 
 @app.route("/charges/<int:charge_id>", methods=["GET"])
@@ -96,6 +96,7 @@ def get_charge(charge_id):
 
 
 @app.route("/external/payments", methods=["POST"])
+@limiter.limit("5 per minute")
 @require_api_key
 def external_payment():
     data = request.get_json()
