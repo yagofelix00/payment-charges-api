@@ -12,11 +12,25 @@ from exceptions.charge_exceptions import (
     InvalidChargeValue
 )
 from audit.logger import logger
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 
 
 load_dotenv()
 
 app = Flask(__name__)
+
+def rate_limit_key():
+    return request.headers.get("x-api-key") or get_remote_address()
+
+
+limiter = Limiter(
+    key_func=rate_limit_key,
+    app=app,
+    default_limits=[]
+)
+
 
 # Configuração do banco de dados e chave secreta para sessões e WebSockets
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
