@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import Blueprint, request, jsonify
 from repository.database import db
 from db_models.charges import Charge, ChargeStatus
 from services.charge_service import check_and_expire
@@ -7,11 +7,9 @@ import uuid
 
 from audit.logger import logger
 
+charges_bp = Blueprint("charges", __name__)
 
-
-
-
-@app.route("/charges", methods=["POST"])
+@charges_bp.route("/charges", methods=["POST"])
 def create_charge():
     data = request.get_json()
 
@@ -42,7 +40,7 @@ def create_charge():
                      "status": charge.status}), 201
 
 
-@app.route("/charges/<int:charge_id>", methods=["GET"])
+@charges_bp.route("/charges/<int:charge_id>", methods=["GET"])
 def get_charge(charge_id):
     charge = Charge.query.get(charge_id)
 
