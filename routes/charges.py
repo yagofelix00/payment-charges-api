@@ -4,6 +4,8 @@ from db_models.charges import Charge, ChargeStatus
 from services.charge_service import check_and_expire
 from datetime import datetime, timedelta
 import uuid
+from infrastructure.redis_client import redis_client
+import json
 
 from audit.logger import logger
 
@@ -42,17 +44,30 @@ def create_charge():
 
 @charges_bp.route("/charges/<int:charge_id>", methods=["GET"])
 def get_charge(charge_id):
-    charge = Charge.query.get(charge_id)
+    cache_key = f"charge:{charge_id}"
 
+    cached = redis_client.get(cache_key)
+    if cached:
+        return jsonify(json.loads(cached))
+    
+    charge = Charge.query.get(charge_id)
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
     check_and_expire(charge)
 
-    return jsonify({
+    response = {
         "id": charge.id,
         "value": charge.value,
-        "status": charge.status.value,
+        "status": charge.status,
         "expires_at": charge.expires_at.isoformat()
-    })
+    }
+
+    redis_client.setex(
+        cache_key,
+        60,  # cache por 60s
+        json.dumps(response)
+    )
+
+    return jsonify(response)
 
