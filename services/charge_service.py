@@ -6,6 +6,7 @@ from exceptions.charge_exceptions import (
     InvalidChargeValue
 )
 from audit.logger import logger
+from infrastructure.redis_client import redis_client
 
 
 def check_and_expire(charge):
@@ -18,6 +19,7 @@ def check_and_expire(charge):
                 f"Charge expired | charge_id={charge.id} | external_id={charge.external_id}"
             )
 
+            redis_client.delete(f"charge:{charge.id}")
 
 
 def confirm_payment(charge, value):
