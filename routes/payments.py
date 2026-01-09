@@ -4,7 +4,9 @@ from services.charge_service import confirm_payment
 from security.auth import require_api_key
 from audit.logger import logger
 from extensions import limiter
-
+from db_models.charges import Charge, ChargeStatus
+from repository.database import db
+from infrastructure.redis_client import redis_client
 
 payments_bp = Blueprint("payments", __name__)
 
@@ -24,7 +26,25 @@ def external_payment():
 
     if not charge:
         return jsonify({"error": "Invalid external_id"}), 400
+    
+    ttl_key = f"charge:ttl:{charge.id}"
 
+    # 🔥 Redis manda na expiração
+    if not redis_client.exists(ttl_key):
+        if charge.status == ChargeStatus.PENDING:
+            charge.status = ChargeStatus.EXPIRED
+            db.session.commit()
+
+        logger.warning(
+            f"Payment attempt on expired charge | charge_id={charge.id}"
+        )
+
+        return jsonify({"error": "Charge expired"}), 400
+    
     confirm_payment(charge, data.get("value"))
+
+    logger.info(
+        f"Payment confirmed | charge_id={charge.id} | external_id={charge.external_id}"
+    )
 
     return jsonify({"message": "Payment confirmed"})
