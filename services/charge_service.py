@@ -9,21 +9,7 @@ from audit.logger import logger
 from infrastructure.redis_client import redis_client
 
 
-def check_and_expire(charge):
-    if charge.status == ChargeStatus.PENDING:
-        if datetime.utcnow() > charge.expires_at:
-            charge.status = ChargeStatus.EXPIRED
-            db.session.commit()
-
-            redis_client.delete(f"charge:{charge.id}")
-
-            logger.info(
-                f"Charge expired | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
-            )
-
-
 def confirm_payment(charge, value):
-    check_and_expire(charge)
 
     if charge.status != ChargeStatus.PENDING:
         logger.warning(
@@ -41,8 +27,10 @@ def confirm_payment(charge, value):
     charge.paid_at = datetime.utcnow()
     db.session.commit()
 
+    # Limpa TODOS os caches
     redis_client.delete(f"charge:{charge.id}")
-
+    redis_client.delete(f"charge:ttl:{charge.id}")
+    
     logger.info(
         f"Payment confirmed | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
     )
