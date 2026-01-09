@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 from repository.database import db
 from db_models.charges import Charge, ChargeStatus
-from services.charge_service import check_and_expire
-from datetime import datetime, timedelta
+from datetime import datetime
 import uuid
 from infrastructure.redis_client import redis_client
 import json
@@ -26,7 +25,6 @@ def create_charge():
         status=ChargeStatus.PENDING,
         external_id=str(uuid.uuid4()),
         created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(minutes=30)
     )
 
 
@@ -52,6 +50,7 @@ def create_charge():
 @charges_bp.route("/charges/<int:charge_id>", methods=["GET"])
 def get_charge(charge_id):
     cache_key = f"charge:{charge_id}"
+    ttl_key = f"charge:ttl:{charge_id}"
 
     cached = redis_client.get(cache_key)
     if cached:
@@ -61,17 +60,16 @@ def get_charge(charge_id):
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
-    # 🔥 Se TTL sumiu, a cobrança expirou
     if not redis_client.exists(ttl_key):
         if charge.status == ChargeStatus.PENDING:
             charge.status = ChargeStatus.EXPIRED
             db.session.commit()
+            redis_client.delete(cache_key)
 
     response = {
         "id": charge.id,
         "value": charge.value,
         "status": charge.status,
-        "expires_at": charge.expires_at.isoformat()
     }
 
     redis_client.setex(
