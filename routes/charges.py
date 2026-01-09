@@ -32,9 +32,16 @@ def create_charge():
 
     db.session.add(charge)
     db.session.commit()
+
+    # 🔥 Redis controla a expiração
+    redis_client.setex(
+        f"charge:ttl:{charge.id}",
+        1800,  # 30 minutos
+        "PENDING"
+    )
     
     logger.info(
-    f"Charge created | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
+    f"Charge created | charge_id={charge.id} | external_id={charge.external_id}"
     )
 
     return jsonify({"id": charge.id,
@@ -54,7 +61,11 @@ def get_charge(charge_id):
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
-    check_and_expire(charge)
+    # 🔥 Se TTL sumiu, a cobrança expirou
+    if not redis_client.exists(ttl_key):
+        if charge.status == ChargeStatus.PENDING:
+            charge.status = ChargeStatus.EXPIRED
+            db.session.commit()
 
     response = {
         "id": charge.id,

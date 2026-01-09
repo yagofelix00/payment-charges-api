@@ -15,11 +15,11 @@ def check_and_expire(charge):
             charge.status = ChargeStatus.EXPIRED
             db.session.commit()
 
-            logger.info(
-                f"Charge expired | charge_id={charge.id} | external_id={charge.external_id}"
-            )
-
             redis_client.delete(f"charge:{charge.id}")
+
+            logger.info(
+                f"Charge expired | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
+            )
 
 
 def confirm_payment(charge, value):
@@ -40,6 +40,8 @@ def confirm_payment(charge, value):
     charge.status = ChargeStatus.PAID
     charge.paid_at = datetime.utcnow()
     db.session.commit()
+
+    redis_client.delete(f"charge:{charge.id}")
 
     logger.info(
         f"Payment confirmed | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
