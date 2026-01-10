@@ -7,6 +7,8 @@ from extensions import limiter
 from db_models.charges import Charge, ChargeStatus
 from repository.database import db
 from infrastructure.redis_client import redis_client
+from security.idempotency import idempotent
+
 
 payments_bp = Blueprint("payments", __name__)
 
@@ -14,6 +16,7 @@ payments_bp = Blueprint("payments", __name__)
 @payments_bp.route("/external/payments", methods=["POST"])
 @limiter.limit("5 per minute")
 @require_api_key
+@idempotent(ttl=300)
 def external_payment():
     data = request.get_json()
     
@@ -27,7 +30,7 @@ def external_payment():
     if not charge:
         return jsonify({"error": "Invalid external_id"}), 400
     
-    ttl_key = f"charge:ttl:{charge.id}"
+    ttl_key = f"charge:ttl:{charge.external_id}"
 
     # 🔥 Redis manda na expiração
     if not redis_client.exists(ttl_key):
