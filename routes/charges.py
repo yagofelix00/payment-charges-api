@@ -33,7 +33,7 @@ def create_charge():
 
     # 🔥 Redis controla a expiração
     redis_client.setex(
-        f"charge:ttl:{charge.id}",
+        f"charge:ttl:{charge.external_id}",
         1800,  # 30 minutos
         "PENDING"
     )
@@ -50,7 +50,6 @@ def create_charge():
 @charges_bp.route("/charges/<int:charge_id>", methods=["GET"])
 def get_charge(charge_id):
     cache_key = f"charge:{charge_id}"
-    ttl_key = f"charge:ttl:{charge_id}"
 
     cached = redis_client.get(cache_key)
     if cached:
@@ -60,6 +59,8 @@ def get_charge(charge_id):
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
+    ttl_key = f"charge:ttl:{charge.external_id}"
+    
     if not redis_client.exists(ttl_key):
         if charge.status == ChargeStatus.PENDING:
             charge.status = ChargeStatus.EXPIRED
