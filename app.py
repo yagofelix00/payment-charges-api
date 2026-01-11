@@ -5,16 +5,17 @@ import os
 from repository.database import db
 from extensions import limiter
 from routes.charges import charges_bp
-from routes.payments import payments_bp
 from exceptions.charge_exceptions import (
     ChargeNotPayable,
     InvalidChargeValue
 )
+from routes.webhooks import webhooks_bp
+
 
 load_dotenv()
 
 app = Flask(__name__)
-
+app.register_blueprint(webhooks_bp)
 
 # Configuração do banco de dados e chave secreta para sessões e WebSockets
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
@@ -26,7 +27,6 @@ limiter.init_app(app)
 
 # REGISTER BLUEPRINTS
 app.register_blueprint(charges_bp)
-app.register_blueprint(payments_bp)
 
 # ERROR HANDLERS
 @app.errorhandler(ChargeNotPayable)
