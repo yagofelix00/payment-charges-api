@@ -31,6 +31,9 @@ def pix_webhook():
         return jsonify({"error": "Charge not found"}), 404
 
     # 🔒 Regra CRÍTICA
+    if status not in ["PAID", "EXPIRED"]:
+        return jsonify({"error": "Invalid status"}), 400
+
     if charge.status != ChargeStatus.PENDING:
         return jsonify({"message": "Charge already processed"}), 200
 
