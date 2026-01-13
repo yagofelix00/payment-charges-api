@@ -6,11 +6,14 @@ from infrastructure.redis_client import redis_client
 from security.auth import require_api_key
 from security.idempotency import idempotent
 from audit.logger import logger
+from security.webhook_signature import require_webhook_signature
+
 
 webhooks_bp = Blueprint("webhooks", __name__)
 
 @webhooks_bp.route("/webhooks/pix", methods=["POST"])
 @idempotent(ttl=300)
+@require_webhook_signature
 def pix_webhook():
     data = request.get_json()
 
