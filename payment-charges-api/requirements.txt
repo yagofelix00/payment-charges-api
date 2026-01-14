@@ -1,3 +1,23 @@
-flask
-requests
-python-dotenv
+# Core
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+
+# Database
+SQLAlchemy==2.0.25
+
+# Environment
+python-dotenv==1.0.1
+
+# Redis
+redis==5.0.1
+
+# Rate limit
+Flask-Limiter==3.5.0
+
+# Security / utils
+requests==2.31.0
+
+# WebSockets (se ainda estiver usando)
+Flask-SocketIO==5.3.6
+eventlet==0.33.3
+
