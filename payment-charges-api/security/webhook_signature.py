@@ -30,7 +30,12 @@ def verify_webhook_signature():
     # ⏱ Replay attack protection
     # Reject requests outside the allowed time window
     now = int(time.time())
-    if abs(now - int(timestamp)) > TOLERANCE_SECONDS:
+    try:
+        timestamp = int(timestamp)
+    except ValueError:
+        return False
+
+    if abs(now - timestamp) > TOLERANCE_SECONDS:
         return False
 
     # Raw request body must be used for signature validation
