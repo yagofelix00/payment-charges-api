@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, g
 from dotenv import load_dotenv
 import os
 
@@ -10,7 +10,7 @@ from exceptions.charge_exceptions import (
     InvalidChargeValue
 )
 from routes.webhooks import webhooks_bp
-
+from audit.request_context import init_request_id, REQUEST_ID_HEADER
 
 load_dotenv()
 
@@ -24,6 +24,16 @@ app.config["WEBHOOK_SECRET"] = os.getenv("WEBHOOK_SECRET")
 
 if not app.config["WEBHOOK_SECRET"]:
     raise RuntimeError("WEBHOOK_SECRET not configured")
+
+# MIDDLEWARES (OBSERVABILITY)
+@app.before_request
+def _before_request():
+    init_request_id()
+
+@app.after_request
+def _after_request(response):
+    response.headers[REQUEST_ID_HEADER] = g.request_id
+    return response
 
 # INIT EXTENSIONS
 db.init_app(app)
@@ -42,7 +52,7 @@ def handle_invalid_value(e):
     return jsonify({"error": str(e)}), 400
 
 
-
+# ENTRYPOINT
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
