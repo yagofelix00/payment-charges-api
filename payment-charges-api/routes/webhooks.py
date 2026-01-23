@@ -106,7 +106,8 @@ def pix_webhook():
 
         # Log informativo para auditoria / monitoramento.
         logger.info(
-            f"Payment confirmed via webhook | charge_id={charge.id}"
+            f"Payment confirmed via webhook", 
+            extra={"charge_id": charge.id, "external_id": external_id}
         )
 
         return jsonify({"message": "Payment confirmed"}), 200
