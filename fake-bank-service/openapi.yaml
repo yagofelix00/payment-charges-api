@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info:
+  title: Fake Bank Service (PIX)
+  version: 1.0.0
+servers:
+  - url: http://localhost:6000
+tags:
+  - name: Bank
+
+paths:
+  /bank/pix/charges:
+    post:
+      tags: [Bank]
+      summary: Register a charge at the bank
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [external_id, value, webhook_url]
+              properties:
+                external_id: { type: string }
+                value: { type: number, format: float }
+                webhook_url: { type: string }
+            example:
+              external_id: "d2e2b2b2-1111-2222-3333-444444444444"
+              value: 100.0
+              webhook_url: "http://localhost:5000/webhooks/pix"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                message: "Charge registered in bank"
+                external_id: "d2e2b2b2-1111-2222-3333-444444444444"
+
+  /bank/pix/pay:
+    post:
+      tags: [Bank]
+      summary: Process a PIX payment and trigger webhook (with retry/backoff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [external_id]
+              properties:
+                external_id: { type: string }
+            example:
+              external_id: "d2e2b2b2-1111-2222-3333-444444444444"
+      responses:
+        "200":
+          description: Payment processed and webhook dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                message: "PIX processed by bank"
+                event_id: "evt_9f2c8d4c-aaaa-bbbb-cccc-111111111111"
+        "404":
+          description: Charge not found
