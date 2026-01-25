@@ -1,0 +1,227 @@
+openapi: 3.0.3
+info:
+  title: Payment Platform (PIX) - Payment Charges API
+  version: 1.0.0
+  description: |
+    Payment Charges API with signed webhooks (HMAC + timestamp), idempotency, Redis TTL, and a Fake Bank Service.
+servers:
+  - url: http://localhost:5000
+    description: payment-charges-api (main)
+tags:
+  - name: Charges
+  - name: Webhooks
+
+paths:
+  /charges:
+    post:
+      tags: [Charges]
+      summary: Create a charge
+      description: Creates a new charge with PENDING status and an expiration TTL in Redis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChargeRequest'
+            example:
+              value: 100.0
+      responses:
+        "201":
+          description: Charge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateChargeResponse'
+              example:
+                id: 1
+                external_id: "d2e2b2b2-1111-2222-3333-444444444444"
+                status: "PENDING"
+        "400":
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid value"
+
+  /charges/{charge_id}:
+    get:
+      tags: [Charges]
+      summary: Get a charge by internal id
+      parameters:
+        - in: path
+          name: charge_id
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "200":
+          description: Charge details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeResponse'
+              example:
+                id: 1
+                value: 100.0
+                status: "PENDING"
+                expires_at: "2026-01-24T12:34:56.000000"
+        "404":
+          description: Charge not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Charge not found"
+
+  /webhooks/pix:
+    post:
+      tags: [Webhooks]
+      summary: PIX payment webhook receiver
+      description: |
+        Receives a payment confirmation event from the bank (Fake Bank).
+        Validates:
+        - HMAC signature (X-Signature)
+        - Timestamp tolerance window (X-Timestamp)
+        - Idempotency (event_id) via Redis
+        - Charge TTL via Redis
+      parameters:
+        - in: header
+          name: X-Signature
+          required: true
+          schema:
+            type: string
+          example: "sha256=ab12cd34..."
+        - in: header
+          name: X-Timestamp
+          required: true
+          schema:
+            type: string
+          example: "1700000000"
+        - in: header
+          name: X-Event-Id
+          required: true
+          schema:
+            type: string
+          example: "evt_9f2c8d4c-aaaa-bbbb-cccc-111111111111"
+        - in: header
+          name: X-Request-Id
+          required: false
+          schema:
+            type: string
+          example: "yago-001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEvent'
+            example:
+              event_id: "evt_9f2c8d4c-aaaa-bbbb-cccc-111111111111"
+              external_id: "d2e2b2b2-1111-2222-3333-444444444444"
+              value: 100.0
+              status: "PAID"
+              timestamp: 1700000000
+      responses:
+        "200":
+          description: Webhook processed or safely ignored (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+              example:
+                message: "Payment confirmed"
+        "400":
+          description: Invalid webhook payload or expired charge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Charge expired"
+        "401":
+          description: Invalid signature / unauthorized webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid webhook signature"
+        "404":
+          description: Charge not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Charge not found"
+
+components:
+  schemas:
+    CreateChargeRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: number
+          format: float
+          example: 100.0
+
+    CreateChargeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        external_id:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, PAID, EXPIRED]
+
+    ChargeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        value:
+          type: number
+          format: float
+        status:
+          type: string
+          enum: [PENDING, PAID, EXPIRED]
+        expires_at:
+          type: string
+          format: date-time
+
+    WebhookEvent:
+      type: object
+      required: [event_id, external_id, value, status, timestamp]
+      properties:
+        event_id:
+          type: string
+        external_id:
+          type: string
+        value:
+          type: number
+          format: float
+        status:
+          type: string
+          enum: [PAID]
+        timestamp:
+          type: integer
+          description: Unix epoch seconds
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
