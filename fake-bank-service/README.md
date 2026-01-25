@@ -56,6 +56,37 @@ fake-bank-service/
 
 ---
 
+### 🧩 Convenção de Camadas
+
+O Fake Bank Service segue uma estrutura simples e explícita, simulando um
+provedor de pagamento real:
+
+- **routes/**  
+  Camada HTTP. Responsável por:
+  - endpoints que simulam ações bancárias
+  - recebimento de comandos de pagamento
+
+- **services/**  
+  Camada de processamento:
+  - lógica de envio de webhooks
+  - retry + exponential backoff
+  - construção de eventos (`event_id`, payload)
+
+- **clients/**  
+  Comunicação externa:
+  - cliente HTTP responsável por despachar webhooks
+  - isolamento de chamadas de rede
+
+- **security/**  
+  Segurança de integração:
+  - geração de assinaturas HMAC
+  - padronização de headers de webhook
+
+- **audit/**  
+  Logs e observabilidade para simular monitoramento bancário
+
+---
+
 ## 📦 Variáveis de Ambiente
 
 Arquivo `.env` ou `config.py`:

@@ -82,6 +82,41 @@ payment-charges-api/
 
 ---
 
+### 🧩 Convenção de Camadas
+
+Este serviço segue uma separação clara de responsabilidades:
+
+- **routes/**  
+  Camada HTTP. Responsável apenas por:
+  - receber requests
+  - validar payloads básicos
+  - devolver responses  
+  (sem regra de negócio)
+
+- **services/**  
+  Camada de domínio. Contém:
+  - regras de negócio
+  - validações de fluxo
+  - decisões de estado (PENDING → PAID / EXPIRED)
+
+- **security/**  
+  Camada transversal de segurança:
+  - validação de webhooks (HMAC + timestamp)
+  - idempotência por `event_id`
+  - autenticação quando aplicável
+
+- **infrastructure/**  
+  Integrações externas e recursos de suporte:
+  - Redis (TTL, cache, idempotência)
+  - clientes externos
+
+- **audit/**  
+  Observabilidade e auditoria:
+  - logging estruturado
+  - correlation ID (`X-Request-Id`)
+
+---
+
 ## 📦 Variáveis de Ambiente
 
 Arquivo `.env`:
