@@ -5,6 +5,8 @@ import requests
 
 from audit.request_context import get_request_id
 from security.hmac import sign_payload
+from dlq.storage import enqueue_failed_webhook
+
 
 # Defaults (you can move these to config.py if you prefer)
 DEFAULT_TIMEOUT_SECONDS = 5
@@ -74,16 +76,22 @@ def send_webhook(
 
     delay = float(initial_delay_seconds)
 
+    last_status_code = None
+    last_error = None
+    last_response_body = None
+
     for attempt in range(1, max_retries + 1):
         try:
             resp = requests.post(
                 url,
-                data=body,          # RAW body (string)
+                data=body,
                 headers=headers,
                 timeout=timeout_seconds,
             )
 
-            # Success if 2xx
+            # Zerando erro de exception se teve response HTTP
+            last_error = None
+
             if 200 <= resp.status_code < 300:
                 print(
                     f"[BANK] webhook delivered | attempt={attempt} "
@@ -91,32 +99,44 @@ def send_webhook(
                 )
                 return True
 
-            # If non-2xx, treat as retryable (like many providers do)
             print(
                 f"[BANK] webhook failed | attempt={attempt} "
                 f"| status={resp.status_code} | event_id={event_id} | request_id={request_id}"
             )
+
+            last_status_code = resp.status_code
+            last_response_body = (resp.text or "")[:1000]
 
         except requests.RequestException as e:
             print(
                 f"[BANK] webhook error | attempt={attempt} "
                 f"| error={e} | event_id={event_id} | request_id={request_id}"
             )
+            last_error = str(e)
 
-        # No more retries
         if attempt == max_retries:
             break
 
-        # Sleep with exponential backoff + jitter
         sleep_for = _sleep_with_jitter(delay)
         time.sleep(sleep_for)
-
         delay = min(delay * backoff_multiplier, max_delay_seconds)
 
+    # DLQ: não persistir assinatura
+    safe_headers = {k: v for k, v in headers.items() if k.lower() != "x-signature"}
+
+    enqueue_failed_webhook(
+        url=url,
+        payload=payload,
+        headers=safe_headers,
+        last_status_code=last_status_code,
+        last_error=last_error,
+        # se você adicionar no storage.py:
+        # last_response_body=last_response_body,
+    )
+
     print(
-        f"[BANK] webhook permanently failed after retries "
+        f"[BANK] webhook permanently failed after retries -> DLQ "
         f"| event_id={event_id} | request_id={request_id}"
     )
     return False
-
 
