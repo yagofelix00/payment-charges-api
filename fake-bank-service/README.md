@@ -25,6 +25,8 @@ Este serviço representa o **lado externo** da integração, permitindo testar f
 * Observabilidade cross-service
 * Separação clara por rotas, serviços e clientes
 * Simulação de integração bancária realista
+* Dead Letter Queue (DLQ) para falhas definitivas de webhook
+
 
 ---
 
@@ -220,6 +222,68 @@ X-Request-Id: demo-001
 
 ---
 
+## ☠️ Dead Letter Queue (DLQ)
+
+Quando um webhook **falha definitivamente**, mesmo após todas as tentativas de
+**retry com exponential backoff**, o evento é enviado para uma
+**Dead Letter Queue (DLQ)**.
+
+Isso garante que eventos de pagamento **nunca sejam perdidos**, permitindo
+auditoria e reprocessamento manual — exatamente como em integrações reais
+com bancos e gateways de pagamento.
+
+### Quando um evento vai para a DLQ?
+
+- Timeout persistente ao chamar o webhook
+- Erros de rede repetidos
+- Respostas HTTP não-2xx após todas as tentativas
+- Falhas definitivas de entrega
+
+### Onde os eventos são armazenados?
+
+Os eventos são persistidos no Fake Bank Service em formato **JSON Lines**:
+
+```text
+fake-bank-service/dlq_data/failed_webhooks.jsonl
+```
+
+Cada evento registra:
+
+* `event_id`
+* `external_id`
+* payload enviado
+* último status HTTP recebido
+* última exceção capturada (se houver)
+* timestamp UTC
+* status de replay
+
+### Endpoints da DLQ
+
+#### Listar eventos falhos
+
+```http
+GET /bank/dlq
+```
+
+#### Reprocessar um evento específico
+
+```http
+POST /bank/dlq/replay
+```
+
+Payload:
+
+```json
+{
+  "event_id": "evt_xxx"
+}
+```
+
+> O reprocessamento respeita idempotência e marca o evento como `replayed`
+> após sucesso.
+
+---
+
 ## 🔐 Segurança
 
 * Assinatura HMAC baseada no **raw body**
@@ -240,6 +304,8 @@ Seu foco é simular **integração externa realista**, não substituir um banco 
 
 * Retry/backoff: ✅ implementado
 * Assinatura HMAC: ✅ implementada
+* Dead Letter Queue (DLQ): ✅ implementada
+* Replay manual de webhooks: ✅ implementado
 * Integração com Payment API: ✅ completa
 * Persistência bancária: ❌ intencionalmente ausente
 
