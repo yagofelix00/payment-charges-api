@@ -1,9 +1,12 @@
 from flask import Flask, g
 from routes.pix import pix_bp
 from audit.request_context import init_request_id, REQUEST_ID_HEADER
+from routes.dlq import dlq_bp
+
 
 app = Flask(__name__)
 app.register_blueprint(pix_bp)
+app.register_blueprint(dlq_bp)
 
 @app.before_request
 def before_request():
