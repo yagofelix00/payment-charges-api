@@ -4,15 +4,19 @@ import uuid
 
 pix_bp = Blueprint("pix", __name__, url_prefix="/bank/pix")
 
-# Simulated in-memory storage for bank charges
+# In-memory store used only for simulation (no persistence by design).
+# In a real bank/PSP, this would be a database or internal ledger.
 BANK_CHARGES = {}
 
 
 @pix_bp.route("/charges", methods=["POST"])
 def create_pix_charge():
     """
-    Register a PIX charge in the fake bank system.
-    This simulates the bank receiving a charge request.
+    Registers a charge in the fake bank.
+
+    This endpoint simulates the "bank side" receiving a charge request
+    from an external payment system and storing minimal state needed
+    to later trigger the PIX payment + webhook.
     """
     data = request.get_json()
 
@@ -39,10 +43,12 @@ def create_pix_charge():
 @pix_bp.route("/pay", methods=["POST"])
 def process_pix_payment():
     """
-    Simulate PIX payment processing and trigger webhook.
+    Simulates a PIX payment settlement and triggers the webhook callback.
+
+    The webhook delivery itself is handled by the dispatcher (retry/backoff/DLQ),
+    keeping this route focused on orchestrating the simulated payment event.
     """
     data = request.get_json()
-
     external_id = data.get("external_id")
 
     if not external_id:
@@ -52,6 +58,7 @@ def process_pix_payment():
     if not charge:
         return jsonify({"error": "Charge not found"}), 404
 
+    # Event ID is the idempotency key for webhook processing on the receiver side.
     event_id = f"evt_{uuid.uuid4()}"
 
     payload = {
@@ -61,17 +68,20 @@ def process_pix_payment():
         "status": "PAID"
     }
 
-    # Trigger webhook with retry + backoff
+    # Trigger webhook (retry/backoff + DLQ on permanent failure).
     send_webhook(
         url=charge["webhook_url"],
         payload=payload
     )
 
+    # Update the simulated bank state after dispatch attempt.
+    # (In real systems you'd also track settlement timestamps, reconciliation, etc.)
     charge["status"] = "PAID"
 
     return jsonify({
         "message": "PIX processed by bank",
         "event_id": event_id
     }), 200
+
 
 
