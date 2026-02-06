@@ -28,9 +28,9 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "instance", "database.db")
 
 # Ensure instance directory exists before SQLite initialization
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+os.makedirs("/app/instance", exist_ok=True)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////app/instance/database.db"
 
 # Security-related configuration
 app.config["EXTERNAL_API_KEY"] = os.getenv("EXTERNAL_API_KEY")
