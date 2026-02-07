@@ -99,13 +99,15 @@ def send_webhook(
                 )
                 return True
 
-            print(
-                f"[BANK] webhook failed | attempt={attempt} "
-                f"| status={resp.status_code} | event_id={event_id} | request_id={request_id}"
-            )
-
             last_status_code = resp.status_code
             last_response_body = (resp.text or "")[:1000]
+
+            print(
+                f"[BANK] webhook failed | attempt={attempt} "
+                f"| status={last_status_code} | event_id={event_id} | request_id={request_id} "
+                f"| response_body={last_response_body}"
+            )
+
 
         except requests.RequestException as e:
             print(
@@ -135,8 +137,11 @@ def send_webhook(
     )
 
     print(
-        f"[BANK] webhook permanently failed after retries -> DLQ "
-        f"| event_id={event_id} | request_id={request_id}"
+    f"[BANK] webhook permanently failed after retries -> DLQ "
+    f"| event_id={event_id} | request_id={request_id} "
+    f"| last_status={last_status_code} | last_error={last_error} "
+    f"| last_response_body={last_response_body}"
     )
+
     return False
 
