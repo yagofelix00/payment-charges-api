@@ -6,11 +6,16 @@ from infrastructure.redis_client import redis_client
 from security.idempotency import idempotent
 from audit.logger import logger
 from security.webhook_signature import require_webhook_signature
-
+from decimal import Decimal, InvalidOperation
 
 # Blueprint responsible for handling incoming payment webhooks
 webhooks_bp = Blueprint("webhooks", __name__)
 
+def to_decimal(value):
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError):
+        return None
 
 @webhooks_bp.route("/webhooks/pix", methods=["POST"])
 @require_webhook_signature
@@ -31,8 +36,11 @@ def pix_webhook():
     """
 
     # Parse incoming JSON payload
-    data = request.get_json()
-
+    data = request.get_json(silent=True)
+    
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+    
     external_id = data.get("external_id")
     value = data.get("value")
     status = data.get("status")
@@ -84,15 +92,18 @@ def pix_webhook():
                 f"Webhook received for expired charge | charge_id={charge.id}"
             )
             return jsonify({"error": "Charge expired"}), 400
+      
+        # ...
+        value_dec = to_decimal(value)
+        charge_value_dec = to_decimal(charge.value)
 
-        # Proteção adicional: garante que o valor notificado casa com o valor
-        # do charge. Qualquer diferença deve ser investigada e, portanto,
-        # a notificação é rejeitada e registrada em log.
-        if value != charge.value:
-            logger.warning(
-                f"Invalid value on webhook | charge_id={charge.id}"
-            )
+        if value_dec is None:
+            return jsonify({"error": "Invalid value type"}), 400
+
+        if value_dec != charge_value_dec:
+            logger.warning(f"Invalid value on webhook | charge_id={charge.id} | got={value_dec} expected={charge_value_dec}")
             return jsonify({"error": "Invalid value"}), 400
+
 
         # Atualiza o estado do charge para PAID e registra o timestamp UTC.
         charge.status = ChargeStatus.PAID
