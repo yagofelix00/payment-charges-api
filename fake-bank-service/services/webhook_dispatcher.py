@@ -102,12 +102,20 @@ def send_webhook(
             last_status_code = resp.status_code
             last_response_body = (resp.text or "")[:1000]
 
+            # 4xx (exceto 429) -> erro permanente, não vale retry
+            if 400 <= resp.status_code < 500 and resp.status_code != 429:
+                print(
+                    f"[BANK] webhook non-retryable | attempt={attempt} "
+                    f"| status={last_status_code} | event_id={event_id} | request_id={request_id} "
+                    f"| response_body={last_response_body}"
+                )
+                break
+
             print(
                 f"[BANK] webhook failed | attempt={attempt} "
                 f"| status={last_status_code} | event_id={event_id} | request_id={request_id} "
                 f"| response_body={last_response_body}"
-            )
-
+            )    
 
         except requests.RequestException as e:
             print(
