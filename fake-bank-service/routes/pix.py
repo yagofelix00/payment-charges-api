@@ -69,17 +69,25 @@ def process_pix_payment():
     }
 
     # Trigger webhook (retry/backoff + DLQ on permanent failure).
-    send_webhook(
-        url=charge["webhook_url"],
-        payload=payload
+    delivered = send_webhook(
+    url=charge["webhook_url"],
+    payload=payload
     )
 
     # Update the simulated bank state after dispatch attempt.
-    # (In real systems you'd also track settlement timestamps, reconciliation, etc.)
+    # NOTE: In real banking systems, this would involve a settlement ledger,
+    # reconciliation jobs, timestamps, and possibly async confirmation flows.
     charge["status"] = "PAID"
 
+    if not delivered:
+        # The bank processed the PIX payment, but was unable to notify the recipient.
+        return jsonify({
+            "message": "PIX processed, but webhook delivery failed (sent to DLQ)",
+            "event_id": event_id
+        }), 502
+
     return jsonify({
-        "message": "PIX processed by bank",
+        "message": "PIX processed and webhook delivered",
         "event_id": event_id
     }), 200
 
