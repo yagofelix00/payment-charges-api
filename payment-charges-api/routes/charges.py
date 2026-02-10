@@ -7,6 +7,11 @@ from infrastructure.redis_client import redis_client
 import json
 
 from audit.logger import logger
+from services.charge_state_machine import (
+    ChargeState,
+    InvalidChargeTransition,
+    transition_charge,
+)
 
 charges_bp = Blueprint("charges", __name__)
 
@@ -77,11 +82,12 @@ def get_charge(charge_id):
     # If the TTL key no longer exists and the charge is still PENDING, we mark it EXPIRED.
     # This ensures the API reflects expiration without relying on background schedulers.
     if not redis_client.exists(ttl_key):
-        if charge.status == ChargeStatus.PENDING:
-            charge.status = ChargeStatus.EXPIRED
-            db.session.commit()
+        try:
+            transition_charge(charge, ChargeState.EXPIRED)
             # Invalidate cache (if any) to avoid serving stale state after status transition.
             redis_client.delete(cache_key)
+        except InvalidChargeTransition:
+            pass
 
     response = {
         "id": charge.id,
