@@ -62,9 +62,14 @@ def pix_webhook():
 
         # 🔍 3. Busca cobrança
         charge = Charge.query.filter_by(external_id=external_id).first()
+
         if not charge:
             logger.error(f"Charge not found | external_id={external_id}")
             return jsonify({"error": "Charge not found"}), 404
+
+        if str(charge.status) in (ChargeState.PAID.value, ChargeState.EXPIRED.value):
+            logger.info(f"Ignored webhook for already finalized charge | id={charge.id} | status={charge.status}")
+            return jsonify({"message": "Charge already processed"}), 200
 
         # 🔑 Chave Redis usada para controlar TTL/validade da cobrança.
         ttl_key = f"charge:ttl:{external_id}"
