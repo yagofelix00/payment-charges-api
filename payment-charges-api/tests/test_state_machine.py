@@ -64,7 +64,8 @@ def client(app):
 
 
 def _create_charge(value=100.0, status=ChargeStatus.PENDING, external_id="ext-1"):
-    charge = Charge(value=value, status=status, external_id=external_id)
+    status_value = status.value if hasattr(status, "value") else str(status)
+    charge = Charge(value=value, status=status_value, external_id=external_id)
     db.session.add(charge)
     db.session.commit()
     return charge
@@ -81,7 +82,7 @@ def test_transition_pending_to_paid(app):
         transition_charge(charge, ChargeState.PAID)
 
         refreshed = Charge.query.get(charge.id)
-        assert refreshed.status == ChargeStatus.PAID
+        assert refreshed.status == ChargeStatus.PAID.value
         assert refreshed.paid_at is not None
 
 
@@ -91,7 +92,7 @@ def test_transition_pending_to_expired(app):
         transition_charge(charge, ChargeState.EXPIRED)
 
         refreshed = Charge.query.get(charge.id)
-        assert refreshed.status == ChargeStatus.EXPIRED
+        assert refreshed.status == ChargeStatus.EXPIRED.value
 
 
 def test_invalid_transition_paid_to_expired(app):
@@ -119,11 +120,12 @@ def test_webhook_paid_ignored_for_expired(client, app):
         )
 
     payload = {
+        "event_id": "evt_test_001",
         "external_id": "ext-webhook-expired",
         "value": 55.0,
         "status": "PAID",
     }
-    payload_bytes = json.dumps(payload).encode()
+    payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
     signature = _sign_payload("test-webhook-secret", payload_bytes)
 
     response = client.post(
@@ -134,6 +136,7 @@ def test_webhook_paid_ignored_for_expired(client, app):
             "X-Timestamp": str(int(time.time())),
             "X-Signature": signature,
             "Idempotency-Key": "idem-expired-webhook",
+            "X-Event-Id": "evt_test_001",
         },
     )
 
