@@ -82,12 +82,16 @@ def get_charge(charge_id):
     # If the TTL key no longer exists and the charge is still PENDING, we mark it EXPIRED.
     # This ensures the API reflects expiration without relying on background schedulers.
     if not redis_client.exists(ttl_key):
-        try:
-            transition_charge(charge, ChargeState.EXPIRED)
-            # Invalidate cache (if any) to avoid serving stale state after status transition.
-            redis_client.delete(cache_key)
-        except InvalidChargeTransition:
-            pass
+        logger.warning(f"TTL missing for charge | id={charge.id} | status={charge.status}")
+
+        if charge.status == ChargeState.PENDING.value:
+            try:
+                transition_charge(charge, ChargeState.EXPIRED)
+                # Invalidate cache (if any) to avoid serving stale state after status transition.
+                redis_client.delete(cache_key)
+                logger.info(f"Charge expired via TTL check | id={charge.id}")
+            except Exception:
+                logger.exception(f"Failed to expire charge via TTL check | id={charge.id}")
 
     response = {
         "id": charge.id,
