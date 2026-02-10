@@ -1,12 +1,16 @@
 from flask import Blueprint, request, jsonify
 from repository.database import db
-from db_models.charges import Charge, ChargeStatus
-from datetime import datetime
+from db_models.charges import Charge
 from infrastructure.redis_client import redis_client
 from security.idempotency import idempotent
 from audit.logger import logger
 from security.webhook_signature import require_webhook_signature
 from decimal import Decimal, InvalidOperation
+from services.charge_state_machine import (
+    ChargeState,
+    InvalidChargeTransition,
+    transition_charge,
+)
 
 # Blueprint responsible for handling incoming payment webhooks
 webhooks_bp = Blueprint("webhooks", __name__)
@@ -62,11 +66,6 @@ def pix_webhook():
             logger.error(f"Charge not found | external_id={external_id}")
             return jsonify({"error": "Charge not found"}), 404
 
-        # 🔐 4. Regras de negócio: apenas cobranças pendentes podem ser processadas
-        if charge.status != ChargeStatus.PENDING:
-            logger.warning(f"Ignored webhook for non-pending charge | id={charge.id}")
-            return jsonify({"message": "Charge already processed"}), 200
-
         # 🔑 Chave Redis usada para controlar TTL/validade da cobrança.
         ttl_key = f"charge:ttl:{external_id}"
 
@@ -81,10 +80,15 @@ def pix_webhook():
 
         if not ttl_exists:
             try:
-                charge.status = ChargeStatus.EXPIRED
-                db.session.commit()
+                logger.warning(f"Webhook received but charge TTL missing/expired | id={charge.id}")
+                return jsonify({"message": "Expired charge ignored"}), 200
+
+            except InvalidChargeTransition:
+                logger.warning(
+                    f"Ignored webhook for non-pending charge | id={charge.id}"
+                )
+                return jsonify({"message": "Charge already processed"}), 200
             except Exception:
-                db.session.rollback()
                 logger.exception(f"Failed to mark charge expired | id={charge.id}")
                 return jsonify({"error": "Internal server error"}), 500
 
@@ -105,13 +109,12 @@ def pix_webhook():
             return jsonify({"error": "Invalid value"}), 400
 
 
-        # Atualiza o estado do charge para PAID e registra o timestamp UTC.
-        charge.status = ChargeStatus.PAID
-        charge.paid_at = datetime.utcnow()
         try:
-            db.session.commit()
+            transition_charge(charge, ChargeState.PAID)
+        except InvalidChargeTransition:
+            logger.warning(f"Ignored webhook for non-pending charge | id={charge.id}")
+            return jsonify({"message": "Charge already processed"}), 200
         except Exception:
-            db.session.rollback()
             logger.exception(f"Failed to commit payment for charge | id={charge.id}")
             return jsonify({"error": "Internal server error"}), 500
 
