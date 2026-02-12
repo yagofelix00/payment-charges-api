@@ -13,10 +13,10 @@ from services.charge_state_machine import (
     transition_charge,
 )
 
-charges_bp = Blueprint("charges", __name__)
+charges_bp = Blueprint("charges", __name__, url_prefix="/payment")
 
 
-@charges_bp.route("/payment/charges", methods=["POST"])
+@charges_bp.route("/charges", methods=["POST"])
 def create_charge():
     # NOTE: Keep HTTP layer thin: validate basic request shape and delegate business rules to service layer
     # (In this project, logic is still here for simplicity, but the intention is clear.)
@@ -61,7 +61,7 @@ def create_charge():
     }), 201
 
 
-@charges_bp.route("/payment/charges/<int:charge_id>", methods=["GET"])
+@charges_bp.route("/charges/<int:charge_id>", methods=["GET"])
 def get_charge(charge_id):
     # Read-through caching: speed up repeated reads of the same charge for short periods.
     # IMPORTANT: Cache is treated as ephemeral — DB remains the persistent store.
