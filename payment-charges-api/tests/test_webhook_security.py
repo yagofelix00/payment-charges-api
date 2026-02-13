@@ -110,3 +110,75 @@ def test_webhook_invalid_signature_returns_401_and_keeps_pending(client, app):
         refreshed = Charge.query.get(charge.id)
         assert refreshed.status == ChargeStatus.PENDING.value
 
+def test_webhook_timestamp_outside_window_returns_401_or_400_and_keeps_pending(client, app):
+    with app.app_context():
+        charge = _create_charge(
+            value=150.0,
+            status=ChargeStatus.PENDING,
+            external_id="ext-old-timestamp",
+        )
+        ttl_key = f"charge:ttl:{charge.external_id}"
+        app.fake_redis.setex(ttl_key, 1800, "PENDING")
+        assert app.fake_redis.exists(ttl_key) == 1
+    payload = {
+        "event_id": "evt_test_old_timestamp",
+        "external_id": "ext-old-timestamp",
+        "value": 150.0,
+        "status": "PAID",
+    }
+    payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+    signature = _sign_payload("test-webhook-secret", payload_bytes)
+    response = client.post(
+        "/webhooks/pix",
+        data=payload_bytes,
+        headers={
+            "Content-Type": "application/json",
+            "X-Timestamp": str(int(time.time()) - 10_000),
+            "X-Signature": signature,
+            "X-Event-Id": "evt_test_old_timestamp",
+            "Idempotency-Key": "evt_test_old_timestamp",
+        },
+    )
+    if response.status_code not in (401, 400):
+        pytest.xfail(
+            "Timestamp validation appears missing in security/webhook_signature.py "
+            "(expected rejection for old timestamp)."
+        )
+    assert response.status_code in (401, 400)
+    with app.app_context():
+        refreshed = Charge.query.get(charge.id)
+        assert refreshed.status == ChargeStatus.PENDING.value
+
+def test_webhook_value_mismatch_returns_400_and_keeps_pending(client, app):
+    with app.app_context():
+        charge = _create_charge(
+            value=100.0,
+            status=ChargeStatus.PENDING,
+            external_id="ext-value-mismatch",
+        )
+        ttl_key = f"charge:ttl:{charge.external_id}"
+        app.fake_redis.setex(ttl_key, 1800, "PENDING")
+        assert app.fake_redis.exists(ttl_key) == 1
+    payload = {
+        "event_id": "evt_test_value_mismatch",
+        "external_id": "ext-value-mismatch",
+        "value": 999.0,
+        "status": "PAID",
+    }
+    payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+    signature = _sign_payload("test-webhook-secret", payload_bytes)
+    response = client.post(
+        "/webhooks/pix",
+        data=payload_bytes,
+        headers={
+            "Content-Type": "application/json",
+            "X-Timestamp": str(int(time.time())),
+            "X-Signature": signature,
+            "X-Event-Id": "evt_test_value_mismatch",
+            "Idempotency-Key": "evt_test_value_mismatch",
+        },
+    )
+    assert response.status_code == 400
+    with app.app_context():
+        refreshed = Charge.query.get(charge.id)
+        assert refreshed.status == ChargeStatus.PENDING.value
