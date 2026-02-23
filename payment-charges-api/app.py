@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, g
 from dotenv import load_dotenv
+from routes.health import health_bp
 import os
 
 from repository.database import db
@@ -20,8 +21,10 @@ app = Flask(__name__)
 # Register webhook routes early to ensure proper request handling
 app.register_blueprint(webhooks_bp)
 
-# Database configuration
+# Register health check routes
+app.register_blueprint(health_bp)
 
+# Database configuration
 # Use an absolute path for SQLite to avoid issues with different
 # working directories (CLI, Docker, gunicorn, etc.).
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
