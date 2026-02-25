@@ -48,15 +48,28 @@ def pix_webhook():
     external_id = data.get("external_id")
     value = data.get("value")
     status = data.get("status")
+    event_id = data.get("event_id")
 
     # Centralized safety guard: catch unexpected exceptions and ensure
     # we return a controlled 500 while logging the full stack trace.
     try:
         # 🧾 1. Extrai payload e valida campos mínimos
+        if not event_id:
+            return jsonify({"error": "event_id is required"}), 400
+
         if not external_id or not value or not status:
             return jsonify({"error": "Invalid payload"}), 400
 
         # 📤 2. Ignora notificações que não representam pagamento concluído
+        event_key = f"webhook:event:{event_id}"
+        try:
+            if redis_client.exists(event_key):
+                return jsonify({"message": "Duplicate event ignored"}), 200
+            redis_client.setex(event_key, 86400, "1")
+        except Exception:
+            logger.exception(f"Redis check failed for event dedupe key={event_key}")
+            return jsonify({"error": "Service unavailable"}), 503
+
         if status != "PAID":
             return jsonify({"message": "Ignored"}), 200
 
