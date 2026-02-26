@@ -113,11 +113,6 @@ def pix_webhook():
             except Exception:
                 logger.exception(f"Failed to mark charge expired | id={charge.id}")
                 return jsonify({"error": "Internal server error"}), 500
-
-            logger.warning(
-                f"Webhook received for expired charge | charge_id={charge.id}"
-            )
-            return jsonify({"error": "Charge expired"}), 400
       
         # ...
         value_dec = to_decimal(value)
