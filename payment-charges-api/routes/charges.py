@@ -5,6 +5,7 @@ from datetime import datetime
 import uuid
 from infrastructure.redis_client import redis_client
 import json
+from extensions import limiter
 
 from audit.logger import logger
 from services.charge_state_machine import (
@@ -17,6 +18,7 @@ charges_bp = Blueprint("charges", __name__, url_prefix="/payment")
 
 
 @charges_bp.route("/charges", methods=["POST"])
+@limiter.limit("10 per minute")
 def create_charge():
     # NOTE: Keep HTTP layer thin: validate basic request shape and delegate business rules to service layer
     # (In this project, logic is still here for simplicity, but the intention is clear.)
