@@ -51,32 +51,32 @@ O projeto tem foco **educacional e de portfólio**, demonstrando **como sistemas
 * Retry + exponential backoff no Fake Bank
 * Separação clara por camadas e responsabilidades
 
-## ?? Event Deduplication
+## 🔁 Event Deduplication
 
 Para evitar processamento duplicado de eventos de webhook, o sistema implementa deduplica��o server-side baseada em `event_id`.
 
 Funcionamento:
 
 - Cada webhook recebido exige `event_id` no payload.
-- Antes de processar a cobran�a, o sistema verifica no Redis a chave:
+- Antes de processar a cobrança, o sistema verifica no Redis a chave:
   `webhook:event:{event_id}`.
-- Se j� existir, o evento � ignorado (HTTP 200 – idempotent safe response).
-- Se n�o existir, o evento � processado normalmente.
-- A chave � persistida no Redis com TTL de 24 horas
-  apenas ap�s a transi��o de estado bem-sucedida.
+- Se já existir, o evento é ignorado (HTTP 200 – idempotent safe response).
+- Se não existir, o evento é processado normalmente.
+- A chave é persistida no Redis com TTL de 24 horas
+  apenas após a transição de estado bem-sucedida.
 
 Isso protege contra:
 - Retries do provedor
 - Reenvio manual de webhooks
-- Ataques de replay fora da janela de idempot�ncia
+- Ataques de replay fora da janela de idempotencia
 
 > Modelo inspirado em provedores como **Stripe, Mercado Pago e OpenPix**.
 
-## ?? Health & Readiness
+## 🔁 Health & Readiness
 
-A API exp�e dois endpoints voltados para ambientes de produ��o, adequados para ambientes conteinerizados (Docker, Kubernetes, etc.):
+A API expõe dois endpoints voltados para ambientes de produção, adequados para ambientes conteinerizados (Docker, Kubernetes, etc.):
 ### `/health`
-Verifica apenas se o servi�o est� ativo (liveness probe).
+Verifica apenas se o serviço está ativo (liveness probe).
 
 Retorna:
 ```json
@@ -84,7 +84,7 @@ Retorna:
 ```
 
 ### `/ready`
-Executa valida��es de depend�ncias cr�ticas:
+Executa validações de dependências críticas:
 
 - Conectividade com o banco de dados (SQLAlchemy `SELECT 1`)
 - Conectividade com o Redis (`PING`)
