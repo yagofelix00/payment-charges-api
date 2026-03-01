@@ -51,6 +51,25 @@ O projeto tem foco **educacional e de portfólio**, demonstrando **como sistemas
 * Retry + exponential backoff no Fake Bank
 * Separação clara por camadas e responsabilidades
 
+## ?? Event Deduplication
+
+Para evitar processamento duplicado de eventos de webhook, o sistema implementa deduplica��o server-side baseada em `event_id`.
+
+Funcionamento:
+
+- Cada webhook recebido exige `event_id` no payload.
+- Antes de processar a cobran�a, o sistema verifica no Redis a chave:
+  `webhook:event:{event_id}`.
+- Se j� existir, o evento � ignorado (HTTP 200 – idempotent safe response).
+- Se n�o existir, o evento � processado normalmente.
+- A chave � persistida no Redis com TTL de 24 horas
+  apenas ap�s a transi��o de estado bem-sucedida.
+
+Isso protege contra:
+- Retries do provedor
+- Reenvio manual de webhooks
+- Ataques de replay fora da janela de idempot�ncia
+
 > Modelo inspirado em provedores como **Stripe, Mercado Pago e OpenPix**.
 
 ---
