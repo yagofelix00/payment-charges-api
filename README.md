@@ -215,7 +215,8 @@ X-Request-Id: demo-001
 
 ## 📜 OpenAPI
 
-* Contrato oficial da API: `openapi.yaml`
+* Payment Charges API: `payment-charges-api/openapi.yaml`
+* Fake Bank Service: `fake-bank-service/openapi.yaml`
 * Define endpoints, payloads, headers e erros
 * Pode ser usado para:
 
