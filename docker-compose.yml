@@ -1,11 +1,19 @@
 services:
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   payment-charges-api:
     build: ./payment-charges-api
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
@@ -13,7 +21,20 @@ services:
       - WEBHOOK_SECRET=super-secret
       - FLASK_ENV=development
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:5000/ready', timeout=3)"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
       - ./payment-charges-api/instance:/app/instance
       - ./payment-charges-api/logs:/app/logs
@@ -21,6 +42,7 @@ services:
 
   fake-bank-service:
     build: ./fake-bank-service
+    restart: unless-stopped
     ports:
       - "6000:6000"
     environment:
@@ -31,5 +53,18 @@ services:
       - MAX_DELAY_SECONDS=10
       - TIMEOUT_SECONDS=5
     depends_on:
-      - payment-charges-api
+      payment-charges-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:6000/health', timeout=3)"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
   
