@@ -6,7 +6,7 @@ from services.webhook_dispatcher import send_webhook
 dlq_bp = Blueprint("dlq", __name__, url_prefix="/bank/dlq")
 
 
-@dlq_bp.route("/dlq", methods=["GET"])
+@dlq_bp.route("", methods=["GET"])
 def dlq_list():
     # Returns most recent failures first (storage reverses the list).
     limit = int(request.args.get("limit", 50))
