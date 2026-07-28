@@ -5,11 +5,36 @@ from services.webhook_dispatcher import send_webhook
 # DLQ API lives under /bank namespace to keep routing consistent with other bank operations.
 dlq_bp = Blueprint("dlq", __name__, url_prefix="/bank/dlq")
 
+DEFAULT_LIMIT = 50
+MIN_LIMIT = 1
+MAX_LIMIT = 100
+
 
 @dlq_bp.route("", methods=["GET"])
 def dlq_list():
     # Returns most recent failures first (storage reverses the list).
-    limit = int(request.args.get("limit", 50))
+    raw_limits = request.args.getlist("limit")
+
+    if not raw_limits:
+        limit = DEFAULT_LIMIT
+    else:
+        if len(raw_limits) != 1:
+            return jsonify({"error": "Invalid limit"}), 400
+
+        raw_limit = raw_limits[0]
+
+        if not (
+            raw_limit.isascii()
+            and raw_limit.isdecimal()
+            and len(raw_limit) <= len(str(MAX_LIMIT))
+        ):
+            return jsonify({"error": "Invalid limit"}), 400
+
+        limit = int(raw_limit)
+
+        if not MIN_LIMIT <= limit <= MAX_LIMIT:
+            return jsonify({"error": "Invalid limit"}), 400
+
     items = list_failed_webhooks(limit=limit)
     return jsonify({"count": len(items), "items": items}), 200
 
