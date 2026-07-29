@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Dict, List, Optional
 
 # DLQ storage is file-based (JSON Lines) on purpose:
@@ -33,7 +33,7 @@ def enqueue_failed_webhook(
     _ensure_dir()
 
     record = {
-        "ts_utc": datetime.utcnow().isoformat(),
+        "ts_utc": datetime.now(UTC).isoformat(),
         "event_id": payload.get("event_id"),
         "external_id": payload.get("external_id"),
         "url": url,
@@ -98,7 +98,7 @@ def mark_replayed(event_id: str) -> bool:
     for r in records:
         if r.get("event_id") == event_id:
             r["replayed"] = True
-            r["replayed_at_utc"] = datetime.utcnow().isoformat()
+            r["replayed_at_utc"] = datetime.now(UTC).isoformat()
             changed = True
 
     if changed:
