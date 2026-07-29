@@ -12,6 +12,7 @@ from flask import Flask
 from db_models.charges import Charge, ChargeStatus
 from repository.database import db
 from routes.charges import charges_bp
+import routes.webhooks as webhooks_module
 from routes.webhooks import webhooks_bp
 from security.webhook_signature import build_signed_message, calculate_signature
 
@@ -89,6 +90,29 @@ def _post_signed_webhook(client, payload, idempotency_key):
         "/webhooks/pix",
         data=payload_bytes,
         headers=headers,
+    )
+
+
+def _post_signed_raw_webhook(client, raw_body, idempotency_key, event_id=None):
+    timestamp_text = str(int(time.time()))
+    headers = {
+        "X-Timestamp": timestamp_text,
+        "X-Signature": _sign_payload(
+            "test-webhook-secret",
+            timestamp_text,
+            raw_body,
+        ),
+        "Idempotency-Key": idempotency_key,
+    }
+
+    if event_id:
+        headers["X-Event-Id"] = event_id
+
+    return client.post(
+        "/webhooks/pix",
+        data=raw_body,
+        headers=headers,
+        content_type="application/json",
     )
 
 
@@ -214,6 +238,139 @@ def test_webhook_missing_status_returns_400(client):
     assert response.get_json() == {"error": "Invalid payload"}
 
 
+@pytest.mark.parametrize(
+    ("case_name", "payload", "expected_body"),
+    [
+        ("empty_object", {}, {"error": "event_id is required"}),
+        ("json_string", "invalid", {"error": "Invalid JSON payload"}),
+        ("json_number", 123, {"error": "Invalid JSON payload"}),
+        ("json_array", [], {"error": "Invalid JSON payload"}),
+        ("json_boolean", True, {"error": "Invalid JSON payload"}),
+        ("json_null", None, {"error": "Invalid JSON payload"}),
+        (
+            "event_id_empty",
+            {
+                "event_id": "",
+                "external_id": "charge-123",
+                "value": 100.00,
+                "status": "PAID",
+            },
+            {"error": "event_id is required"},
+        ),
+        (
+            "external_id_empty",
+            {
+                "event_id": "evt-empty-external-id",
+                "external_id": "",
+                "value": 100.00,
+                "status": "PAID",
+            },
+            {"error": "Invalid payload"},
+        ),
+        (
+            "status_empty",
+            {
+                "event_id": "evt-empty-status",
+                "external_id": "charge-123",
+                "value": 100.00,
+                "status": "",
+            },
+            {"error": "Invalid payload"},
+        ),
+        (
+            "value_null",
+            {
+                "event_id": "evt-null-value",
+                "external_id": "charge-123",
+                "value": None,
+                "status": "PAID",
+            },
+            {"error": "Invalid payload"},
+        ),
+    ],
+)
+def test_pix_webhook_rejects_invalid_payload_structure(
+    client,
+    monkeypatch,
+    case_name,
+    payload,
+    expected_body,
+):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("domain flow should not be called")
+
+    monkeypatch.setattr(webhooks_module, "acquire_event_claim", fail_if_called)
+    monkeypatch.setattr(
+        webhooks_module,
+        "resolve_charge_for_paid_webhook",
+        fail_if_called,
+    )
+    monkeypatch.setattr(webhooks_module, "transition_charge", fail_if_called)
+    monkeypatch.setattr(webhooks_module, "mark_event_processed", fail_if_called)
+
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+    response = _post_signed_raw_webhook(
+        client,
+        raw_body,
+        f"invalid-payload-{case_name}",
+    )
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert response.get_json() == expected_body
+
+
+@pytest.mark.parametrize(
+    ("case_name", "payload"),
+    [
+        (
+            "event-id-type",
+            {
+                "event_id": 123,
+                "external_id": "charge-123",
+                "value": 100.00,
+                "status": "PENDING",
+            },
+        ),
+        (
+            "external-id-type",
+            {
+                "event_id": "evt-invalid-external-type",
+                "external_id": 123,
+                "value": 100.00,
+                "status": "PENDING",
+            },
+        ),
+        (
+            "status-type",
+            {
+                "event_id": "evt-invalid-status-type",
+                "external_id": "charge-123",
+                "value": 100.00,
+                "status": 123,
+            },
+        ),
+    ],
+)
+def test_pix_webhook_keeps_current_ignore_contract_for_non_paid_type_cases(
+    client,
+    case_name,
+    payload,
+):
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+    response = _post_signed_raw_webhook(
+        client,
+        raw_body,
+        f"ignored-type-payload-{case_name}",
+    )
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert response.get_json() == {"message": "Ignored"}
+
+
 def test_webhook_non_paid_status_returns_ignored(client):
     response = _post_signed_webhook(
         client,
@@ -331,6 +488,68 @@ def test_webhook_non_numeric_value_returns_400_and_keeps_pending(client, app):
     with app.app_context():
         refreshed = db.session.get(Charge, charge_id)
         assert refreshed.status == ChargeStatus.PENDING.value
+
+
+@pytest.mark.parametrize(
+    ("case_name", "webhook_value"),
+    [
+        ("boolean", True),
+        ("zero", 0),
+        ("negative", -1),
+    ],
+)
+def test_pix_webhook_rejects_invalid_money_values_and_keeps_pending(
+    client,
+    app,
+    monkeypatch,
+    case_name,
+    webhook_value,
+):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("domain flow should not be called")
+
+    monkeypatch.setattr(webhooks_module, "transition_charge", fail_if_called)
+    monkeypatch.setattr(webhooks_module, "mark_event_processed", fail_if_called)
+
+    external_id = f"ext-invalid-money-{case_name}"
+    event_id = f"evt_invalid_money_{case_name}"
+
+    with app.app_context():
+        charge = _create_charge(
+            value=100.0,
+            status=ChargeStatus.PENDING,
+            external_id=external_id,
+        )
+        charge_id = charge.id
+        ttl_key = f"charge:ttl:{external_id}"
+        app.fake_redis.setex(ttl_key, 1800, "PENDING")
+        assert app.fake_redis.exists(ttl_key) == 1
+
+    payload = {
+        "event_id": event_id,
+        "external_id": external_id,
+        "value": webhook_value,
+        "status": "PAID",
+    }
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+    response = _post_signed_raw_webhook(
+        client,
+        raw_body,
+        f"invalid-money-{case_name}",
+        event_id=event_id,
+    )
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert response.get_json() == {"error": "Invalid value type"}
+
+    with app.app_context():
+        refreshed = db.session.get(Charge, charge_id)
+        assert refreshed.status == ChargeStatus.PENDING.value
+        assert refreshed.paid_at is None
+        assert app.fake_redis.exists(f"webhook:event:{event_id}") == 0
+        assert app.fake_redis.exists(f"webhook:event:{event_id}:lock") == 0
 
 
 def test_webhook_invalid_signature_returns_401_and_keeps_pending(client, app):
