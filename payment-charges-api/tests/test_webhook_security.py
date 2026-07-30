@@ -1216,6 +1216,44 @@ def test_webhook_ttl_redis_failure_returns_503_and_keeps_charge_pending(
         assert refreshed.paid_at is None
 
 
+def test_webhook_missing_ttl_expires_charge_and_marks_event_processed(
+    client,
+    app,
+):
+    external_id = "ext-missing-ttl-expires"
+    event_id = "evt-missing-ttl-expires"
+
+    with app.app_context():
+        charge = _create_charge(value=100.0, external_id=external_id)
+        charge_id = charge.id
+        assert app.fake_redis.exists(f"charge:ttl:{external_id}") == 0
+
+    response = _post_signed_webhook(
+        client,
+        {
+            "event_id": event_id,
+            "external_id": external_id,
+            "value": 100.0,
+            "status": "PAID",
+        },
+        "idem-missing-ttl-expires",
+    )
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert response.get_json() == {"message": "Expired charge ignored"}
+    assert app.fake_redis.exists(f"webhook:event:{event_id}") == 1
+    assert app.fake_redis.get(f"webhook:event:{event_id}") == "processed"
+    assert app.fake_redis.exists(f"webhook:event:{event_id}:lock") == 0
+    assert app.fake_redis.exists(f"charge:ttl:{external_id}") == 0
+
+    with app.app_context():
+        refreshed = db.session.get(Charge, charge_id)
+        assert refreshed.status == ChargeStatus.EXPIRED.value
+        assert refreshed.status != ChargeStatus.PAID.value
+        assert refreshed.paid_at is None
+
+
 def test_webhook_retry_after_transient_503_reexecutes_and_caches_success(
     client, app, monkeypatch
 ):

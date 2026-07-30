@@ -137,6 +137,21 @@ def pix_webhook():
         if ttl_result == "missing":
             try:
                 logger.warning(f"Webhook received but charge TTL missing/expired | id={charge.id}")
+                transition_charge(charge, ChargeState.EXPIRED)
+
+                mark_result = mark_event_processed(event_id, claim_token)
+                if mark_result != EVENT_CLAIM_PROCESSED:
+                    logger.error(
+                        "Failed to persist webhook dedupe key after successful processing",
+                        extra={
+                            "event_id": event_id,
+                            "external_id": external_id,
+                            "event_key": event_key(event_id),
+                            "lock_key": event_lock_key(event_id),
+                            "mark_result": mark_result,
+                        }
+                    )
+
                 return jsonify({"message": "Expired charge ignored"}), 200
 
             except InvalidChargeTransition:
