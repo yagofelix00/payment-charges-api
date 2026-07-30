@@ -71,7 +71,7 @@ def confirm_payment(charge, value):
 
     # Limpa TODOS os caches
     redis_client.delete(f"charge:{charge.id}")
-    redis_client.delete(f"charge:ttl:{charge.id}")
+    redis_client.delete(f"charge:ttl:{charge.external_id}")
     
     logger.info(
         f"Payment confirmed | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
