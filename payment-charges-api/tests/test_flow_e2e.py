@@ -159,19 +159,31 @@ def _create_charge_and_register_bank(payment_client, bank_client, value=100.0):
     return charge_data
 
 
-def test_pix_e2e_happy_path_create_pay_webhook_paid(payment_client, bank_client):
+def test_pix_e2e_happy_path_create_pay_webhook_paid(payment_client, bank_client, app):
     charge_data = _create_charge_and_register_bank(payment_client, bank_client, value=120.0)
+    charge_id = charge_data["id"]
+    external_id = charge_data["external_id"]
+    ttl_key = f"charge:ttl:{external_id}"
+
+    assert app.fake_redis.exists(ttl_key) == 1
 
     pay_response = bank_client.post(
         "/bank/pix/pay",
-        json={"external_id": charge_data["external_id"]},
+        json={"external_id": external_id},
     )
     assert pay_response.status_code == 200
     assert pay_response.get_json()["webhook_status_code"] == 200
 
-    status_response = payment_client.get(f"{CHARGES_BASE}/{charge_data['id']}")
+    status_response = payment_client.get(f"{CHARGES_BASE}/{charge_id}")
     assert status_response.status_code == 200
     assert status_response.get_json()["status"] == ChargeStatus.PAID.value
+
+    with app.app_context():
+        refreshed = db.session.get(Charge, charge_id)
+        assert refreshed.status == ChargeStatus.PAID.value
+        assert refreshed.paid_at is not None
+
+    assert app.fake_redis.exists(ttl_key) == 0
 
 
 def test_pix_e2e_webhook_after_ttl_expired_results_in_expired(payment_client, bank_client, app):

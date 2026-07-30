@@ -13,6 +13,7 @@ from security.webhook_event_deduplication import (
 )
 from audit.logger import logger
 from security.webhook_signature import require_webhook_signature
+from services import pix_webhook_service
 from services.pix_webhook_service import (
     check_charge_ttl,
     resolve_charge_for_paid_webhook,
@@ -184,6 +185,20 @@ def pix_webhook():
         except Exception:
             logger.exception(f"Failed to commit payment for charge | id={charge.id}")
             return jsonify({"error": "Internal server error"}), 500
+
+        ttl_key = f"charge:ttl:{external_id}"
+        try:
+            pix_webhook_service.redis_client.delete(ttl_key)
+        except Exception:
+            logger.exception(
+                "Failed to delete PIX charge TTL after successful payment",
+                extra={
+                    "event_id": event_id,
+                    "external_id": external_id,
+                    "ttl_key": ttl_key,
+                    "charge_id": charge.id,
+                },
+            )
         
         mark_result = mark_event_processed(event_id, claim_token)
         if mark_result != EVENT_CLAIM_PROCESSED:
