@@ -70,8 +70,33 @@ def confirm_payment(charge, value):
     db.session.commit()
 
     # Limpa TODOS os caches
-    redis_client.delete(f"charge:{charge.id}")
-    redis_client.delete(f"charge:ttl:{charge.external_id}")
+    cache_key = f"charge:{charge.id}"
+    try:
+        redis_client.delete(cache_key)
+    except Exception:
+        logger.exception(
+            "Failed to delete legacy charge cache after payment confirmation",
+            extra={
+                "charge_id": charge.id,
+                "external_id": charge.external_id,
+                "redis_key": cache_key,
+                "cleanup_operation": "delete_charge_cache",
+            },
+        )
+
+    ttl_key = f"charge:ttl:{charge.external_id}"
+    try:
+        redis_client.delete(ttl_key)
+    except Exception:
+        logger.exception(
+            "Failed to delete legacy charge TTL after payment confirmation",
+            extra={
+                "charge_id": charge.id,
+                "external_id": charge.external_id,
+                "redis_key": ttl_key,
+                "cleanup_operation": "delete_charge_ttl",
+            },
+        )
     
     logger.info(
         f"Payment confirmed | charge_id={charge.id} | external_id={charge.external_id} | value={charge.value}"
