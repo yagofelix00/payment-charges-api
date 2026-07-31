@@ -8,6 +8,7 @@ from exceptions.charge_exceptions import (
 )
 from audit.logger import logger
 from infrastructure.redis_client import redis_client
+from services.charge_state_machine import ChargeState, transition_charge
 from services.money import InvalidMoneyValue, parse_money
 
 
@@ -65,9 +66,7 @@ def confirm_payment(charge, value):
         )
         raise InvalidChargeValue("Invalid value")
 
-    charge.status = ChargeStatus.PAID
-    charge.paid_at = datetime.utcnow()
-    db.session.commit()
+    transition_charge(charge, ChargeState.PAID)
 
     # Limpa TODOS os caches
     cache_key = f"charge:{charge.id}"

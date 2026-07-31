@@ -57,6 +57,64 @@ def test_confirm_payment_checks_status_before_parsing_value(app):
         assert refreshed.status == ChargeStatus.PAID.value
 
 
+def test_confirm_payment_uses_state_machine_for_paid_transition(
+    app,
+    fake_redis,
+    monkeypatch,
+):
+    real_transition_charge = charge_service.transition_charge
+    transition_calls = []
+
+    def spy_transition_charge(charge_arg, target_state):
+        transition_calls.append((charge_arg, target_state))
+        return real_transition_charge(charge_arg, target_state)
+
+    monkeypatch.setattr(
+        charge_service,
+        "transition_charge",
+        spy_transition_charge,
+    )
+    monkeypatch.setattr(charge_service, "redis_client", fake_redis)
+
+    with app.app_context():
+        charge = Charge(
+            value=Decimal("100.00"),
+            status=ChargeStatus.PENDING.value,
+            external_id="external-id-state-machine-confirm",
+        )
+        db.session.add(charge)
+        db.session.commit()
+
+        charge_id = charge.id
+        external_id = charge.external_id
+        cache_key = f"charge:{charge_id}"
+        ttl_key = f"charge:ttl:{external_id}"
+
+        fake_redis.setex(cache_key, 300, "cached")
+        fake_redis.setex(ttl_key, 1800, "PENDING")
+
+        assert fake_redis.exists(cache_key) == 1
+        assert fake_redis.exists(ttl_key) == 1
+
+        result = charge_service.confirm_payment(
+            charge,
+            "100.00",
+        )
+
+        assert result is None
+        assert len(transition_calls) == 1
+
+        called_charge, called_state = transition_calls[0]
+        assert called_charge is charge
+        assert called_state == charge_service.ChargeState.PAID
+
+        refreshed = db.session.get(Charge, charge_id)
+        assert refreshed.status == ChargeStatus.PAID.value
+        assert refreshed.paid_at is not None
+        assert fake_redis.exists(cache_key) == 0
+        assert fake_redis.exists(ttl_key) == 0
+
+
 def test_confirm_payment_deletes_ttl_by_external_id(app, fake_redis, monkeypatch):
     monkeypatch.setattr(charge_service, "redis_client", fake_redis)
 
