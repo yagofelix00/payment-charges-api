@@ -16,6 +16,24 @@ EVENT_CLAIM_LOST_OWNERSHIP = "lost_ownership"
 EVENT_CLAIM_MISSING = "missing"
 EVENT_CLAIM_UNKNOWN = "unknown"
 
+_RELEASE_EVENT_CLAIM_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+
+return 0
+"""
+
+_MARK_EVENT_PROCESSED_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    redis.call("setex", KEYS[2], ARGV[2], ARGV[3])
+    redis.call("del", KEYS[1])
+    return 1
+end
+
+return 0
+"""
+
 
 def _log_exception(message, event_id):
     try:
@@ -85,11 +103,18 @@ def acquire_event_claim(event_id, lock_ttl=EVENT_LOCK_TTL_SECONDS):
 
 def mark_event_processed(event_id, token, ttl=EVENT_PROCESSED_TTL_SECONDS):
     try:
-        if redis_client.get(event_lock_key(event_id)) != token:
-            return EVENT_CLAIM_LOST_OWNERSHIP
-
-        redis_client.setex(event_key(event_id), ttl, EVENT_PROCESSED_VALUE)
-        return EVENT_CLAIM_PROCESSED
+        result = redis_client.eval(
+            _MARK_EVENT_PROCESSED_SCRIPT,
+            2,
+            event_lock_key(event_id),
+            event_key(event_id),
+            token,
+            ttl,
+            EVENT_PROCESSED_VALUE,
+        )
+        if result == 1:
+            return EVENT_CLAIM_PROCESSED
+        return EVENT_CLAIM_LOST_OWNERSHIP
     except Exception:
         _log_exception("Failed to mark webhook event processed", event_id)
         return EVENT_CLAIM_UNAVAILABLE
@@ -97,8 +122,12 @@ def mark_event_processed(event_id, token, ttl=EVENT_PROCESSED_TTL_SECONDS):
 
 def release_event_claim(event_id, token):
     try:
-        if redis_client.get(event_lock_key(event_id)) == token:
-            redis_client.delete(event_lock_key(event_id))
+        redis_client.eval(
+            _RELEASE_EVENT_CLAIM_SCRIPT,
+            1,
+            event_lock_key(event_id),
+            token,
+        )
     except Exception:
         # Releasing the event lock must not mask the original response or exception.
         pass
