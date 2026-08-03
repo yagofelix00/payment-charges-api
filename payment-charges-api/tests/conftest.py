@@ -68,6 +68,25 @@ class FakeRedis:
             self.expirations.pop(key, None)
             self.ttls.pop(key, None)
 
+    def eval(self, script, numkeys, *args):
+        with self._lock:
+            if numkeys == 1:
+                lock_key, token = args
+                if self.get(lock_key) == token:
+                    self.delete(lock_key)
+                    return 1
+                return 0
+
+            if numkeys == 2:
+                lock_key, event_key, token, ttl, processed_value = args
+                if self.get(lock_key) == token:
+                    self.setex(event_key, int(ttl), processed_value)
+                    self.delete(lock_key)
+                    return 1
+                return 0
+
+        raise AssertionError(f"unexpected eval numkeys: {numkeys}")
+
 
 @pytest.fixture
 def fake_redis():
