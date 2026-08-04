@@ -68,16 +68,90 @@ def test_enqueue_failed_webhook_persists_utc_aware_ts_utc(temporary_dlq):
 
 
 def test_mark_replayed_persists_utc_aware_replayed_at_utc(temporary_dlq):
+    dlq_dir, _ = temporary_dlq
     event_id = "evt_dlq_storage_replay"
+    other_event_id = "evt_dlq_storage_other"
     _enqueue_sample(event_id)
+    _enqueue_sample(other_event_id)
+
+    original_other = storage.get_by_event_id(other_event_id)
 
     result = storage.mark_replayed(event_id)
     record = storage.get_by_event_id(event_id)
+    other_record = storage.get_by_event_id(other_event_id)
+    records = storage._load_all()
 
     assert result is True
     assert record["replayed"] is True
     assert record["replayed_at_utc"] is not None
     _assert_utc_aware_iso(record["replayed_at_utc"])
+    assert other_record == original_other
+    assert [r["event_id"] for r in records] == [event_id, other_event_id]
+    assert list(dlq_dir.glob(".failed_webhooks.*.tmp")) == []
+
+
+def test_mark_replayed_write_failure_preserves_original_file(
+    temporary_dlq,
+    monkeypatch,
+):
+    dlq_dir, dlq_file = temporary_dlq
+    event_id = "evt_dlq_storage_replay_failure"
+    other_event_id = "evt_dlq_storage_replay_failure_other"
+    _enqueue_sample(event_id)
+    _enqueue_sample(other_event_id)
+    original_content = dlq_file.read_bytes()
+    real_dumps = storage.json.dumps
+    call_count = 0
+
+    def failing_dumps(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+
+        if call_count == 2:
+            raise RuntimeError("serialization failed")
+
+        return real_dumps(*args, **kwargs)
+
+    monkeypatch.setattr(storage.json, "dumps", failing_dumps)
+
+    with pytest.raises(RuntimeError, match="serialization failed"):
+        storage.mark_replayed(event_id)
+
+    assert dlq_file.read_bytes() == original_content
+    assert list(dlq_dir.glob(".failed_webhooks.*.tmp")) == []
+
+    records = storage._load_all()
+    assert [r["event_id"] for r in records] == [event_id, other_event_id]
+    assert all(r["replayed"] is False for r in records)
+    assert all(r["replayed_at_utc"] is None for r in records)
+
+
+def test_mark_replayed_replace_failure_preserves_original_file(
+    temporary_dlq,
+    monkeypatch,
+):
+    dlq_dir, dlq_file = temporary_dlq
+    event_id = "evt_dlq_storage_replace_failure"
+    other_event_id = "evt_dlq_storage_replace_failure_other"
+    _enqueue_sample(event_id)
+    _enqueue_sample(other_event_id)
+    original_content = dlq_file.read_bytes()
+
+    def failing_replace(*args, **kwargs):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(storage.os, "replace", failing_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        storage.mark_replayed(event_id)
+
+    assert dlq_file.read_bytes() == original_content
+    assert list(dlq_dir.glob(".failed_webhooks.*.tmp")) == []
+
+    records = storage._load_all()
+    assert [r["event_id"] for r in records] == [event_id, other_event_id]
+    assert all(r["replayed"] is False for r in records)
+    assert all(r["replayed_at_utc"] is None for r in records)
 
 
 def test_mark_replayed_missing_event_does_not_change_existing_record(temporary_dlq):

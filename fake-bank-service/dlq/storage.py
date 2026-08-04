@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from datetime import UTC, datetime
 from typing import Dict, List, Optional
 
@@ -80,9 +81,36 @@ def _load_all() -> List[Dict]:
 def _save_all(records: List[Dict]) -> None:
     # Rewrite file only for state transitions (e.g., mark as replayed)
     _ensure_dir()
-    with open(DLQ_FILE, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    temp_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=DLQ_DIR,
+            prefix=".failed_webhooks.",
+            suffix=".tmp",
+            delete=False,
+        ) as f:
+            temp_path = f.name
+
+            for r in records:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+            f.flush()
+            os.fsync(f.fileno())
+
+        os.replace(temp_path, DLQ_FILE)
+        temp_path = None
+    except Exception:
+        if temp_path is not None:
+            try:
+                os.remove(temp_path)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+        raise
 
 
 def mark_replayed(event_id: str) -> bool:
