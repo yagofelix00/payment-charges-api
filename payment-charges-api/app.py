@@ -2,6 +2,7 @@ from flask import Flask, jsonify, g
 from dotenv import load_dotenv
 from routes.health import health_bp
 import os
+from pathlib import Path
 
 from repository.database import db
 from extensions import limiter
@@ -27,13 +28,16 @@ app.register_blueprint(health_bp)
 # Database configuration
 # Use an absolute path for SQLite to avoid issues with different
 # working directories (CLI, Docker, gunicorn, etc.).
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "instance", "database.db")
+BASE_DIR = Path(__file__).resolve().parent
+INSTANCE_DIR = BASE_DIR / "instance"
+DB_PATH = INSTANCE_DIR / "database.db"
+DEFAULT_DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
+DATABASE_URL = os.getenv("DATABASE_URL") or DEFAULT_DATABASE_URL
 
-# Ensure instance directory exists before SQLite initialization
-os.makedirs("/app/instance", exist_ok=True)
+if DATABASE_URL == DEFAULT_DATABASE_URL:
+    INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////app/instance/database.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 
 # Security-related configuration
 app.config["EXTERNAL_API_KEY"] = os.getenv("EXTERNAL_API_KEY")

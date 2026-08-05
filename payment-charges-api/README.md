@@ -161,8 +161,13 @@ Nunca versione arquivos `.env` com segredos reais.
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-flask run
+python app.py
 ```
+
+Execute esses comandos dentro de `payment-charges-api/`.
+O Redis precisa estar disponivel localmente antes de iniciar a API.
+Nesse fluxo, as tabelas sao criadas automaticamente e o SQLite local fica em
+`instance/database.db`.
 
 A API ficará disponível em:
 
