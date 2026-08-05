@@ -51,7 +51,7 @@ payment-charges-api/
 ├── .env
 │
 ├── routes/                   # Camada HTTP (controllers)
-│   ├── charges.py            # POST /charges, GET /charges/{id}
+│   ├── charges.py            # POST /payment/charges, GET /payment/charges/{id}
 │   └── webhooks.py           # POST /webhooks/pix
 │
 ├── services/                 # Regras de negócio
@@ -187,7 +187,7 @@ docker compose up payment-charges-api
 ### Criar cobrança
 
 ```
-POST /charges
+POST /payment/charges
 ```
 
 Payload:
@@ -215,7 +215,7 @@ Resposta:
 ### Consultar cobrança
 
 ```
-GET /charges/{id}
+GET /payment/charges/{id}
 ```
 
 Resposta:

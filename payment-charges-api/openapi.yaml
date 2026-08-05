@@ -12,7 +12,7 @@ tags:
   - name: Webhooks
 
 paths:
-  /charges:
+  /payment/charges:
     post:
       tags: [Charges]
       summary: Create a charge
@@ -45,7 +45,7 @@ paths:
               example:
                 error: "Invalid value"
 
-  /charges/{charge_id}:
+  /payment/charges/{charge_id}:
     get:
       tags: [Charges]
       summary: Get a charge by internal id
