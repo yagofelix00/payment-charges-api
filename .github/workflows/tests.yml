@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  payment-api-tests:
     runs-on: ubuntu-latest
 
     services:
@@ -15,21 +15,40 @@ jobs:
           - 6379:6379
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install Payment API dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r payment-charges-api/requirements.txt
-          pip install -r fake-bank-service/requirements.txt
-          pip install -r requirements-dev.txt
+          python -m pip install -r payment-charges-api/requirements.txt
+          python -m pip install -r requirements-dev.txt
 
-      - name: Run tests
+      - name: Run Payment API tests
+        run: PYTHONPATH=payment-charges-api python -m pytest -p no:debugging payment-charges-api/tests -q
+
+  fake-bank-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Fake Bank dependencies
         run: |
-          python -m pytest payment-charges-api/tests -q
+          python -m pip install --upgrade pip
+          python -m pip install -r fake-bank-service/requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run Fake Bank tests
+        run: PYTHONPATH=fake-bank-service python -m pytest -p no:debugging fake-bank-service/tests -q
