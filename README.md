@@ -131,7 +131,7 @@ A cada push ou pull request:
 
 - As dependências dos dois serviços são instaladas
 - O ambiente de testes é preparado
-- A suíte de testes automatizados de `payment-charges-api/tests` é executada com **pytest**
+- As suítes automatizadas de `payment-charges-api/tests` e `fake-bank-service/tests` são executadas separadamente com **pytest**
 
 Isso garante que mudanças no código não quebrem comportamentos críticos do sistema.
 
